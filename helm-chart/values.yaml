@@ -1,0 +1,17 @@
+replicaCount: 1
+
+image:
+  repository: "mexkek/django-app"
+  pullPolicy: IfNotPresent
+  tag: "" 
+
+app:
+  port: 3003
+  containerPort: 3003
+
+database:
+  host: "db-service"
+  name: "tutorial-dev"
+  user: "vinhle"
+  password: "securepassword123"
+  storageSize: 1Gi
