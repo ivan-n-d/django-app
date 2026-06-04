@@ -1,0 +1,118 @@
+---
+- name: Подготовка всех серверов (Containerd и базовые утилиты)
+  hosts: all
+  become: yes
+  tasks:
+    - name: Загрузка модулей ядра для Kubernetes
+      modprobe:
+        name: "{{ item }}"
+        state: present
+      loop:
+        - overlay
+        - br_netfilter
+
+    - name: Настройка параметров сети (sysctl) для Kubernetes
+      sysctl:
+        name: "{{ item.name }}"
+        value: "{{ item.value }}"
+        sysctl_set: yes
+        state: present
+        reload: yes
+      loop:
+        - { name: 'net.ipv4.ip_forward', value: '1' }
+        - { name: 'net.bridge.bridge-nf-call-iptables', value: '1' }
+        - { name: 'net.bridge.bridge-nf-call-ip6tables', value: '1' }
+    - name: Установка необходимых пакетов
+      apt:
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - software-properties-common
+          - gnupg2
+        state: present
+        update_cache: yes
+
+    - name: Установка containerd
+      apt:
+        name: containerd
+        state: present
+
+    - name: Создание директории для конфигурации containerd
+      file:
+        path: /etc/containerd
+        state: directory
+
+    - name: Генерация дефолтного конфига containerd
+      shell: containerd config default > /etc/containerd/config.toml
+
+    - name: Настройка systemd cgroup driver для containerd
+      replace:
+        path: /etc/containerd/config.toml
+        regexp: 'SystemdCgroup = false'
+        replace: 'SystemdCgroup = true'
+
+    - name: Перезапуск и включение containerd
+      systemd:
+        name: containerd
+        state: restarted
+        enabled: yes 
+
+- name: Подготовка узлов Kubernetes
+  hosts: k8s_cluster
+  become: yes
+  tasks:
+    - name: Скачивание GPG ключа Kubernetes
+      command: curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.29/deb/Release.key -o /tmp/k8s.key
+      args:
+        creates: /tmp/k8s.key
+
+    - name: Добавление ключа K8s
+      command: gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg /tmp/k8s.key
+      args:
+        creates: /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+
+    - name: Добавление репозитория Kubernetes
+      apt_repository:
+        repo: "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.29/deb/ /"
+        state: present
+        filename: kubernetes.list
+
+    - name: Установка kubelet, kubeadm, kubectl
+      apt:
+        name:
+          - kubelet
+          - kubeadm
+          - kubectl
+        state: present
+        update_cache: yes
+
+    - name: Фиксация версий K8s (чтобы не обновились случайно)
+      dpkg_selections:
+        name: "{{ item }}"
+        selection: hold
+      loop:
+        - kubelet
+        - kubeadm
+        - kubectl
+
+- name: Настройка служебного сервера (SRV)
+  hosts: srv
+  become: yes
+  tasks:
+    - name: Установка Docker (для сборок и docker-compose)
+      apt:
+        name: docker.io
+        state: present
+
+    - name: Добавление пользователя ubuntu в группу docker
+      user:
+        name: ubuntu
+        groups: docker
+        append: yes
+
+    - name: Скачивание docker-compose
+      get_url:
+        url: "https://github.com/docker/compose/releases/download/v2.23.0/docker-compose-linux-x86_64"
+        dest: /usr/local/bin/docker-compose
+        mode: 'a+x'

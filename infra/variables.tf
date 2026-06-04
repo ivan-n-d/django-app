@@ -1,0 +1,7 @@
+variable "yandex_token" {
+  type        = string
+  description = "Yandex Cloud OAuth token"
+  sensitive   = true
+}
+variable "cloud_id" { type = string }
+variable "folder_id" { type = string }
