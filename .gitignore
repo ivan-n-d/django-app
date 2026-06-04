@@ -1,2 +1,11 @@
 terraform.tfstate
+terraform.tfstate.backup
 .terraform
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+terraform.tfvars
+*.pem
+private_key*
+.terraformrc
+tmp.txt
